@@ -1,140 +1,130 @@
 import tkinter as tk
-from datetime import datetime
 from tkinter import messagebox, ttk
 
+from library_management.core.structures import LinkedList, Queue, Stack, TreeNode
+from library_management.modules.transactions import add_reservation, borrow_book, load_data, return_book
 
-class TransactionView:
-    def __init__(self, parent, transaction_module, book_module, member_module):
-        self.parent = parent
-        self.transaction_module = transaction_module
-        self.book_module = book_module
-        self.member_module = member_module
-        self.frame = ttk.Frame(parent, padding="30")
-        self.setup_styles()
-        self.setup_ui()
 
-    def setup_styles(self):
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TLabel", font=("Segoe UI", 10))
-        style.configure("TButton", font=("Segoe UI", 10, "bold"), padding=5)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
-        style.configure("Treeview", font=("Segoe UI", 10), rowheight=25)
-        style.configure("Title.TLabel", font=("Segoe UI", 18, "bold"), foreground="#2c3e50")
+class TransactionView(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.pack(fill=tk.BOTH, expand=True)
+        self.create_widgets()
+        self.refresh_all()
 
-    def setup_ui(self):
-        title_label = ttk.Label(self.frame, text="Transaksi Peminjaman", style="Title.TLabel")
-        title_label.pack(pady=(0, 20))
+    def create_widgets(self):
+        ops_frame = ttk.LabelFrame(self, text="Circulation Commands")
+        ops_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-        form_frame = ttk.LabelFrame(self.frame, text="Form Transaksi", padding="20")
-        form_frame.pack(fill=tk.X, pady=10)
+        ttk.Label(ops_frame, text="Book ID:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.ent_book_id = ttk.Entry(ops_frame)
+        self.ent_book_id.grid(row=0, column=1, padx=5, pady=5)
 
-        ttk.Label(form_frame, text="ID Transaksi:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        self.trans_id_entry = ttk.Entry(form_frame, width=35, font=("Segoe UI", 10))
-        self.trans_id_entry.grid(row=0, column=1, pady=8, padx=10)
+        ttk.Label(ops_frame, text="Member ID:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.ent_member_id = ttk.Entry(ops_frame)
+        self.ent_member_id.grid(row=1, column=1, padx=5, pady=5)
 
-        ttk.Label(form_frame, text="ID Anggota:").grid(row=1, column=0, sticky=tk.W, pady=8)
-        self.member_id_entry = ttk.Entry(form_frame, width=35, font=("Segoe UI", 10))
-        self.member_id_entry.grid(row=1, column=1, pady=8, padx=10)
+        ttk.Button(ops_frame, text="Issue Loan", command=self.do_borrow).grid(
+            row=2, column=0, columnspan=2, pady=5, sticky=tk.EW
+        )
+        ttk.Button(ops_frame, text="Process Return", command=self.do_return).grid(
+            row=3, column=0, columnspan=2, pady=5, sticky=tk.EW
+        )
+        ttk.Button(ops_frame, text="Queue Reservation", command=self.do_reserve).grid(
+            row=4, column=0, columnspan=2, pady=5, sticky=tk.EW
+        )
 
-        ttk.Label(form_frame, text="ID Buku:").grid(row=2, column=0, sticky=tk.W, pady=8)
-        self.book_id_entry = ttk.Entry(form_frame, width=35, font=("Segoe UI", 10))
-        self.book_id_entry.grid(row=2, column=1, pady=8, padx=10)
+        right_frame = ttk.Frame(self)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        ttk.Label(form_frame, text="Tanggal Pinjam:").grid(row=3, column=0, sticky=tk.W, pady=8)
-        self.borrow_date_entry = ttk.Entry(form_frame, width=35, font=("Segoe UI", 10))
-        self.borrow_date_entry.grid(row=3, column=1, pady=8, padx=10)
-        self.borrow_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        notebook = ttk.Notebook(right_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
 
-        btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill=tk.X, pady=15)
+        self.tx_tree = ttk.Treeview(notebook, columns=("TxID", "BookID", "MemberID", "Date", "Status"), show="headings")
+        self.tx_tree.heading("TxID", text="Tx ID")
+        self.tx_tree.heading("BookID", text="Book ID")
+        self.tx_tree.heading("MemberID", text="Member ID")
+        self.tx_tree.heading("Date", text="Borrow Date")
+        self.tx_tree.heading("Status", text="Status")
+        notebook.add(self.tx_tree, text="Active Loans (Linked List)")
 
-        ttk.Button(btn_frame, text="Pinjam Buku", command=self.borrow_book).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Kembalikan Buku", command=self.return_book).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Refresh", command=self.refresh_list).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Clear Form", command=self.clear_entries).pack(side=tk.LEFT, padx=5)
+        self.res_tree = ttk.Treeview(notebook, columns=("BookID", "MemberID"), show="headings")
+        self.res_tree.heading("BookID", text="Book ID")
+        self.res_tree.heading("MemberID", text="Member ID")
+        notebook.add(self.res_tree, text="Reservations (Queue)")
 
-        columns = ("id", "id_anggota", "id_buku", "tgl_pinjam", "tgl_kembali", "status")
-        self.tree = ttk.Treeview(self.frame, columns=columns, show="headings", height=12)
-        self.tree.heading("id", text="ID Transaksi")
-        self.tree.heading("id_anggota", text="ID Anggota")
-        self.tree.heading("id_buku", text="ID Buku")
-        self.tree.heading("tgl_pinjam", text="Tgl Pinjam")
-        self.tree.heading("tgl_kembali", text="Tgl Kembali")
-        self.tree.heading("status", text="Status")
+        self.log_list = tk.Listbox(notebook)
+        notebook.add(self.log_list, text="System Log Trace (Stack)")
 
-        self.tree.column("id", width=100, anchor=tk.CENTER)
-        self.tree.column("id_anggota", width=100, anchor=tk.CENTER)
-        self.tree.column("id_buku", width=100, anchor=tk.CENTER)
-        self.tree.column("tgl_pinjam", width=120, anchor=tk.CENTER)
-        self.tree.column("tgl_kembali", width=120, anchor=tk.CENTER)
-        self.tree.column("status", width=100, anchor=tk.CENTER)
+        self.cat_tree_view = ttk.Treeview(notebook, columns=("Name"), show="tree")
+        notebook.add(self.cat_tree_view, text="Classification (Tree)")
 
-        scrollbar = ttk.Scrollbar(self.frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scrollbar.set)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.pack(fill=tk.BOTH, expand=True, pady=10)
+    def refresh_all(self):
+        data = load_data()
 
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
-        self.refresh_list()
-
-    def on_select(self, event):
-        selected = self.tree.selection()
-        if selected:
-            item = self.tree.item(selected[0])
-            self.trans_id_entry.delete(0, tk.END)
-            self.trans_id_entry.insert(0, item["values"][0])
-            self.member_id_entry.delete(0, tk.END)
-            self.member_id_entry.insert(0, item["values"][1])
-            self.book_id_entry.delete(0, tk.END)
-            self.book_id_entry.insert(0, item["values"][2])
-            self.borrow_date_entry.delete(0, tk.END)
-            self.borrow_date_entry.insert(0, item["values"][3])
-
-    def clear_entries(self):
-        self.trans_id_entry.delete(0, tk.END)
-        self.member_id_entry.delete(0, tk.END)
-        self.book_id_entry.delete(0, tk.END)
-        self.borrow_date_entry.delete(0, tk.END)
-        self.borrow_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
-
-    def borrow_book(self):
-        trans_id = self.trans_id_entry.get()
-        member_id = self.member_id_entry.get()
-        book_id = self.book_id_entry.get()
-        borrow_date = self.borrow_date_entry.get()
-        if not trans_id or not member_id or not book_id or not borrow_date:
-            messagebox.showwarning("Peringatan", "Semua field harus diisi!")
-            return
-        self.transaction_module.borrow(trans_id, member_id, book_id, borrow_date)
-        self.clear_entries()
-        self.refresh_list()
-        messagebox.showinfo("Sukses", "Buku berhasil dipinjam!")
-
-    def return_book(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Peringatan", "Pilih transaksi yang ingin dikembalikan!")
-            return
-        trans_id = self.tree.item(selected[0])["values"][0]
-        self.transaction_module.return_book(trans_id, datetime.now().strftime("%Y-%m-%d"))
-        self.refresh_list()
-        messagebox.showinfo("Sukses", "Buku berhasil dikembalikan!")
-
-    def refresh_list(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        transactions = self.transaction_module.read_all()
-        for trans in transactions:
-            self.tree.insert(
-                "",
-                tk.END,
-                values=(
-                    trans.get("id"),
-                    trans.get("member_id"),
-                    trans.get("book_id"),
-                    trans.get("borrow_date"),
-                    trans.get("return_date", "-"),
-                    trans.get("status"),
-                ),
+        for item in self.tx_tree.get_children():
+            self.tx_tree.delete(item)
+        tx_ll = LinkedList()
+        for t in data["transactions"]:
+            tx_ll.append(t)
+        for t in tx_ll.to_list():
+            self.tx_tree.insert(
+                "", tk.END, values=(t["tx_id"], t["book_id"], t["member_id"], t["borrow_date"], t["status"])
             )
+
+        for item in self.res_tree.get_children():
+            self.res_tree.delete(item)
+        res_q = Queue()
+        for r in data["reservations"]:
+            res_q.enqueue(r)
+        for r in res_q.to_list():
+            self.res_tree.insert("", tk.END, values=(r["book_id"], r["member_id"]))
+
+        self.log_list.delete(0, tk.END)
+        log_stack = Stack()
+        for log in data["logs"]:
+            log_stack.push(log)
+        for log in log_stack.to_list():
+            self.log_list.insert(tk.END, log)
+
+        for item in self.cat_tree_view.get_children():
+            self.cat_tree_view.delete(item)
+        root_node = TreeNode("Library Catalog Architecture")
+        fiction = TreeNode("Fiction")
+        fiction.add_child(TreeNode("Sci-Fi"))
+        fiction.add_child(TreeNode("Fantasy"))
+        non_fiction = TreeNode("Non-Fiction")
+        non_fiction.add_child(TreeNode("History"))
+        non_fiction.add_child(TreeNode("Biography"))
+        root_node.add_child(fiction)
+        root_node.add_child(non_fiction)
+
+        def render_tree_nodes(parent_ui_id, structural_node):
+            node_ui_id = self.cat_tree_view.insert(parent_ui_id, tk.END, text=structural_node.name, open=True)
+            for child in structural_node.children:
+                render_tree_nodes(node_ui_id, child)
+
+        render_tree_nodes("", root_node)
+
+    def do_borrow(self):
+        success, msg = borrow_book(self.ent_book_id.get(), self.ent_member_id.get())
+        if success:
+            messagebox.showinfo("Success", "Transaction instance committed.")
+            self.refresh_all()
+        else:
+            messagebox.showerror("Error", msg)
+
+    def do_return(self):
+        success, msg = return_book(self.ent_book_id.get())
+        if success:
+            messagebox.showinfo("Success", "State modification update completed.")
+            self.refresh_all()
+        else:
+            messagebox.showerror("Error", msg)
+
+    def do_reserve(self):
+        if add_reservation(self.ent_book_id.get(), self.ent_member_id.get()):
+            messagebox.showinfo("Success", "Element scheduled into internal Queue structure.")
+            self.refresh_all()
+        else:
+            messagebox.showerror("Error", "Reference verification error during execution.")
