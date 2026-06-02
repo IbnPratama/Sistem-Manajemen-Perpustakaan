@@ -2,19 +2,48 @@ class Node:
     def __init__(self, data):
         self.data = data
         self.next = None
+        self.prev = None
+
+
 class LinkedList:
     def __init__(self):
         self.head = None
+        self._size = 0
 
     def append(self, data):
-        new_node = Node(data)
+        node = Node(data)
         if not self.head:
-            self.head = new_node
-            return
-        last = self.head
-        while last.next:
-            last = last.next
-        last.next = new_node
+            self.head = node
+        else:
+            current = self.head
+            while current.next:
+                current = current.next
+            current.next = node
+            node.prev = current
+        self._size += 1
+
+    def remove(self, key_func):
+        current = self.head
+        while current:
+            if key_func(current.data):
+                if current.prev:
+                    current.prev.next = current.next
+                else:
+                    self.head = current.next
+                if current.next:
+                    current.next.prev = current.prev
+                self._size -= 1
+                return True
+            current = current.next
+        return False
+
+    def find(self, key_func):
+        current = self.head
+        while current:
+            if key_func(current.data):
+                return current.data
+            current = current.next
+        return None
 
     def to_list(self):
         result = []
@@ -24,66 +53,118 @@ class LinkedList:
             current = current.next
         return result
 
+    def __len__(self):
+        return self._size
+
+
 class Stack:
     def __init__(self):
-        self.items = []
-
-    def is_empty(self):
-        return len(self.items) == 0
+        self._data = []
 
     def push(self, item):
-        self.items.append(item)
+        self._data.append(item)
 
     def pop(self):
-        if not self.is_empty():
-            return self.items.pop()
-        return None
+        if self.is_empty():
+            return None
+        return self._data.pop()
+
+    def peek(self):
+        if self.is_empty():
+            return None
+        return self._data[-1]
+
+    def is_empty(self):
+        return len(self._data) == 0
+
+    def __len__(self):
+        return len(self._data)
+
+    def to_list(self):
+        return list(self._data)
+
 
 class Queue:
     def __init__(self):
-        self.items = []
-
-    def is_empty(self):
-        return len(self.items) == 0
+        self._data = []
 
     def enqueue(self, item):
-        self.items.append(item)
+        self._data.append(item)
 
     def dequeue(self):
-        if not self.is_empty():
-            return self.items.pop(0)
-        return None
-    
+        if self.is_empty():
+            return None
+        return self._data.pop(0)
+
+    def peek(self):
+        if self.is_empty():
+            return None
+        return self._data[0]
+
+    def is_empty(self):
+        return len(self._data) == 0
+
+    def __len__(self):
+        return len(self._data)
+
+    def to_list(self):
+        return list(self._data)
+
+
 class HashTable:
-    def __init__(self, size=50):
-        self.size = size
-        self.table = [[] for _ in range(self.size)]
+    def __init__(self, size=64):
+        self._size = size
+        self._buckets = [[] for _ in range(self._size)]
 
     def _hash(self, key):
-        return sum(ord(char) for char in str(key)) % self.size
+        return hash(str(key)) % self._size
 
     def insert(self, key, value):
-        hash_index = self._hash(key)
-        for kv in self.table[hash_index]:
-            if kv[0] == key:
-                kv[1] = value
+        idx = self._hash(key)
+        bucket = self._buckets[idx]
+        for i, (k, _) in enumerate(bucket):
+            if k == key:
+                bucket[i] = (key, value)
                 return
-        self.table[hash_index].append([key, value])
+        bucket.append((key, value))
 
     def get(self, key):
-        hash_index = self._hash(key)
-        for kv in self.table[hash_index]:
-            if kv[0] == key:
-                return kv[1]
+        idx = self._hash(key)
+        for k, v in self._buckets[idx]:
+            if k == key:
+                return v
         return None
 
     def delete(self, key):
-        hash_index = self._hash(key)
-        for i, kv in enumerate(self.table[hash_index]):
-            if kv[0] == key:
-                del self.table[hash_index][i]
+        idx = self._hash(key)
+        bucket = self._buckets[idx]
+        for i, (k, _) in enumerate(bucket):
+            if k == key:
+                bucket.pop(i)
                 return True
         return False
+
+    def keys(self):
+        result = []
+        for bucket in self._buckets:
+            for k, _ in bucket:
+                result.append(k)
+        return result
+
+    def values(self):
+        result = []
+        for bucket in self._buckets:
+            for _, v in bucket:
+                result.append(v)
+        return result
+
+    def items(self):
+        result = []
+        for bucket in self._buckets:
+            for pair in bucket:
+                result.append(pair)
+        return result
+
 
 class BSTNode:
     def __init__(self, key, data):
@@ -92,54 +173,70 @@ class BSTNode:
         self.left = None
         self.right = None
 
-class BinarySearchTree:
+
+class BST:
     def __init__(self):
         self.root = None
 
     def insert(self, key, data):
-        if not self.root:
-            self.root = BSTNode(key, data)
-        else:
-            self._insert_recursive(self.root, key, data)
+        self.root = self._insert(self.root, key, data)
 
-    def _insert_recursive(self, current, key, data):
-        if key < current.key:
-            if current.left is None:
-                current.left = BSTNode(key, data)
-            else:
-                self._insert_recursive(current.left, key, data)
+    def _insert(self, node, key, data):
+        if node is None:
+            return BSTNode(key, data)
+        if key < node.key:
+            node.left = self._insert(node.left, key, data)
+        elif key > node.key:
+            node.right = self._insert(node.right, key, data)
         else:
-            if current.right is None:
-                current.right = BSTNode(key, data)
-            else:
-                self._insert_recursive(current.right, key, data)
+            node.data = data
+        return node
 
-    def inorder_traversal(self):
+    def search(self, key):
+        return self._search(self.root, key)
+
+    def _search(self, node, key):
+        if node is None:
+            return None
+        if key == node.key:
+            return node.data
+        if key < node.key:
+            return self._search(node.left, key)
+        return self._search(node.right, key)
+
+    def delete(self, key):
+        self.root = self._delete(self.root, key)
+
+    def _delete(self, node, key):
+        if node is None:
+            return None
+        if key < node.key:
+            node.left = self._delete(node.left, key)
+        elif key > node.key:
+            node.right = self._delete(node.right, key)
+        else:
+            if node.left is None:
+                return node.right
+            if node.right is None:
+                return node.left
+            min_node = self._find_min(node.right)
+            node.key = min_node.key
+            node.data = min_node.data
+            node.right = self._delete(node.right, min_node.key)
+        return node
+
+    def _find_min(self, node):
+        while node.left:
+            node = node.left
+        return node
+
+    def inorder(self):
         result = []
-        self._inorder_recursive(self.root, result)
+        self._inorder(self.root, result)
         return result
 
-    def _inorder_recursive(self, current, result):
-        if current:
-            self._inorder_recursive(current.left, result)
-            result.append(current.data)
-            self._inorder_recursive(current.right, result)
-
-class Graph:
-    def __init__(self):
-        self.adjacency_list = {}
-
-    def add_vertex(self, book_id):
-        if book_id not in self.adjacency_list:
-            self.adjacency_list[book_id] = []
-
-    def add_edge(self, book_id1, book_id2):
-        self.add_vertex(book_id1)
-        self.add_vertex(book_id2)
-        if book_id2 not in self.adjacency_list[book_id1]:
-            self.adjacency_list[book_id1].append(book_id2)
-        if book_id1 not in self.adjacency_list[book_id2]:
-            self.adjacency_list[book_id2].append(book_id2) 
-
-    def get_recommendations(self, book_id):
-        return self.adjacency_list.get(book_id, [])
+    def _inorder(self, node, result):
+        if node:
+            self._inorder(node.left, result)
+            result.append(node.data)
+            self._inorder(node.right, result)

@@ -1,75 +1,137 @@
 import json
 import os
+import uuid
 from datetime import datetime
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data.json")
+from library_management.core.algorithms import linear_search, merge_sort
+from library_management.core.structures import HashTable, LinkedList, Queue, Stack
+from library_management.modules import books as book_module
+from library_management.modules import members as member_module
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump({"books": [], "members": [], "transactions": [], "reservations": [], "logs": []}, f)
-    with open(DATA_FILE, "r") as f:
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data.json")
+
+
+def _load():
+    with open(DATA_PATH, "r") as f:
         return json.load(f)
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
 
-def borrow_book(book_id, member_id):
-    data = load_data()
-    book_exists = any(b["id"] == book_id for b in data["books"])
-    member_exists = any(m["id"] == member_id for m in data["members"])
-    if not book_exists or not member_exists:
-        return False, "Book ID or Member ID not found."
-    for t in data["transactions"]:
-        if t["book_id"] == book_id and t["status"] == "Borrowed":
-            return False, "Book is currently borrowed by someone else."
-    new_tx = {
-        "tx_id": str(len(data["transactions"]) + 1),
-        "book_id": book_id,
+def _save(data):
+    with open(DATA_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _build_hash_table(transactions):
+    ht = HashTable()
+    for t in transactions:
+        ht.insert(t["id"], t)
+    return ht
+
+
+def _build_linked_list(transactions):
+    ll = LinkedList()
+    for t in transactions:
+        ll.append(t)
+    return ll
+
+
+def get_all_transactions():
+    data = _load()
+    ll = _build_linked_list(data.get("transactions", []))
+    return ll.to_list()
+
+
+def get_active_loans():
+    transactions = get_all_transactions()
+    return [t for t in transactions if t["status"] == "dipinjam"]
+
+
+def get_return_queue():
+    active = get_active_loans()
+    q = Queue()
+    for t in active:
+        q.enqueue(t)
+    return q
+
+
+def get_history_stack():
+    transactions = get_all_transactions()
+    sorted_t = merge_sort(transactions, lambda t: t["borrow_date"])
+    stack = Stack()
+    for t in sorted_t:
+        stack.push(t)
+    return stack
+
+
+def borrow_book(member_id, book_id):
+    book = book_module.get_book_by_id(book_id)
+    if book is None:
+        return False, "Buku tidak ditemukan"
+    if book["stock"] <= 0:
+        return False, "Stok buku habis"
+    member = member_module.get_member_by_id(member_id)
+    if member is None:
+        return False, "Anggota tidak ditemukan"
+    if member.get("active_loans", 0) >= 3:
+        return False, "Anggota sudah meminjam maksimum 3 buku"
+
+    data = _load()
+    transaction = {
+        "id": str(uuid.uuid4())[:8],
         "member_id": member_id,
-        "borrow_date": datetime.now().strftime("%Y-%m-%d"),
-        "status": "Borrowed"
+        "member_name": member["name"],
+        "book_id": book_id,
+        "book_title": book["title"],
+        "borrow_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "return_date": None,
+        "status": "dipinjam",
     }
-    data["transactions"].append(new_tx)
-    data["logs"].append(f"Book {book_id} borrowed by Member {member_id}")
-    save_data(data)
-    return True, "Success"
+    ll = _build_linked_list(data["transactions"])
+    ll.append(transaction)
+    data["transactions"] = ll.to_list()
+    _save(data)
 
-def return_book(book_id):
-    data = load_data()
-    for t in data["transactions"]:
-        if t["book_id"] == book_id and t["status"] == "Borrowed":
-            t["status"] = "Returned"
-            data["logs"].append(f"Book {book_id} returned to shelf")
-            next_res_idx = -1
-            for i, r in enumerate(data["reservations"]):
-                if r["book_id"] == book_id:
-                    next_res_idx = i
-                    break
-            if next_res_idx != -1:
-                next_res = data["reservations"].pop(next_res_idx)
-                new_tx = {
-                    "tx_id": str(len(data["transactions"]) + 1),
-                    "book_id": book_id,
-                    "member_id": next_res["member_id"],
-                    "borrow_date": datetime.now().strftime("%Y-%m-%d"),
-                    "status": "Borrowed"
-                }
-                data["transactions"].append(new_tx)
-                data["logs"].append(f"Reservation fulfilled automatically: Book {book_id} assigned to Member {next_res['member_id']}")
-            save_data(data)
-            return True, "Success"
-    return False, "No active borrowing record found for this book."
+    book_module.adjust_stock(book_id, -1)
+    member_module.update_active_loans(member_id, 1)
+    return True, "Peminjaman berhasil"
 
-def add_reservation(book_id, member_id):
-    data = load_data()
-    book_exists = any(b["id"] == book_id for b in data["books"])
-    member_exists = any(m["id"] == member_id for m in data["members"])
-    if not book_exists or not member_exists:
-        return False
-    new_res = {"book_id": book_id, "member_id": member_id}
-    data["reservations"].append(new_res)
-    data["logs"].append(f"Reservation queue added for Book {book_id} by Member {member_id}")
-    save_data(data)
-    return True
+
+def return_book(transaction_id):
+    data = _load()
+    ht = _build_hash_table(data["transactions"])
+    transaction = ht.get(transaction_id)
+    if transaction is None:
+        return False, "Transaksi tidak ditemukan"
+    if transaction["status"] == "dikembalikan":
+        return False, "Buku sudah dikembalikan"
+
+    transaction["status"] = "dikembalikan"
+    transaction["return_date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ht.insert(transaction_id, transaction)
+    data["transactions"] = [v for _, v in ht.items()]
+    _save(data)
+
+    book_module.adjust_stock(transaction["book_id"], 1)
+    member_module.update_active_loans(transaction["member_id"], -1)
+    return True, "Pengembalian berhasil"
+
+
+def delete_transaction(transaction_id):
+    data = _load()
+    ll = _build_linked_list(data["transactions"])
+    removed = ll.remove(lambda t: t["id"] == transaction_id)
+    if removed:
+        data["transactions"] = ll.to_list()
+        _save(data)
+        return True
+    return False
+
+
+def search_transactions(query):
+    transactions = get_all_transactions()
+    return linear_search(transactions, query, lambda t: t["member_name"] + " " + t["book_title"])
+
+
+def get_transactions_sorted(key="borrow_date"):
+    transactions = get_all_transactions()
+    return merge_sort(transactions, lambda t: str(t.get(key, "")))

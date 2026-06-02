@@ -1,7 +1,5 @@
 {
-    "books": [],
-    "members": [],
-    "transactions": [],
-    "reservations": [],
-    "logs": []
+  "books": [],
+  "members": [],
+  "transactions": []
 }

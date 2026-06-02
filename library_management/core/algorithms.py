@@ -1,60 +1,64 @@
-def merge_sort(arr, key_field):
-    if len(arr) <= 1:
-        return arr
-
-    mid = len(arr) // 2
-    left_half = merge_sort(arr[:mid], key_field)
-    right_half = merge_sort(arr[mid:], key_field)
-
-    return _merge(left_half, right_half, key_field)
+def merge_sort(data, key_func):
+    if len(data) <= 1:
+        return data
+    mid = len(data) // 2
+    left = merge_sort(data[:mid], key_func)
+    right = merge_sort(data[mid:], key_func)
+    return _merge(left, right, key_func)
 
 
-def _merge(left, right, key_field):
+def _merge(left, right, key_func):
     result = []
     i = j = 0
-    
     while i < len(left) and j < len(right):
-        val_left = str(left[i][key_field]).lower() if isinstance(left[i][key_field], str) else left[i][key_field]
-        val_right = str(right[j][key_field]).lower() if isinstance(right[j][key_field], str) else right[j][key_field]
-
-        if val_left <= val_right:
+        if key_func(left[i]) <= key_func(right[j]):
             result.append(left[i])
             i += 1
         else:
             result.append(right[j])
             j += 1
-            
     result.extend(left[i:])
     result.extend(right[j:])
     return result
 
-def binary_search(arr, key_field, target):
-    sorted_arr = merge_sort(arr, key_field)
-    
-    low = 0
-    high = len(sorted_arr) - 1
-    target_val = str(target).lower()
 
+def binary_search(data, target, key_func):
+    low, high = 0, len(data) - 1
     while low <= high:
         mid = (low + high) // 2
-        mid_val = str(sorted_arr[mid][key_field]).lower()
-
-        if mid_val == target_val:
-            return sorted_arr[mid] 
-        elif mid_val < target_val:
+        val = key_func(data[mid])
+        if val == target:
+            return mid
+        elif val < target:
             low = mid + 1
         else:
             high = mid - 1
-            
-    return None 
+    return -1
 
 
-def linear_search_partial(arr, key_field, keyword):
+def linear_search(data, target, key_func):
     results = []
-    keyword = str(keyword).lower()
-    
-    for item in arr:
-        if keyword in str(item[key_field]).lower():
+    for item in data:
+        if target.lower() in str(key_func(item)).lower():
             results.append(item)
-            
     return results
+
+
+def quick_sort(data, key_func):
+    if len(data) <= 1:
+        return data
+    pivot = data[len(data) // 2]
+    left = [x for x in data if key_func(x) < key_func(pivot)]
+    middle = [x for x in data if key_func(x) == key_func(pivot)]
+    right = [x for x in data if key_func(x) > key_func(pivot)]
+    return quick_sort(left, key_func) + middle + quick_sort(right, key_func)
+
+
+def bubble_sort(data, key_func):
+    arr = list(data)
+    n = len(arr)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if key_func(arr[j]) > key_func(arr[j + 1]):
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+    return arr

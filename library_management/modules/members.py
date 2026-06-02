@@ -1,52 +1,107 @@
 import json
 import os
+import uuid
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data.json")
+from library_management.core.algorithms import linear_search, merge_sort
+from library_management.core.structures import HashTable, LinkedList
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump({"books": [], "members": [], "transactions": [], "reservations": [], "logs": []}, f)
-    with open(DATA_FILE, "r") as f:
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data.json")
+
+
+def _load():
+    with open(DATA_PATH, "r") as f:
         return json.load(f)
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
 
-def create_member(member_id, name, email):
-    if not member_id or not name:
+def _save(data):
+    with open(DATA_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _build_linked_list(members):
+    ll = LinkedList()
+    for m in members:
+        ll.append(m)
+    return ll
+
+
+def _build_hash_table(members):
+    ht = HashTable()
+    for m in members:
+        ht.insert(m["id"], m)
+    return ht
+
+
+def get_all_members():
+    data = _load()
+    ll = _build_linked_list(data.get("members", []))
+    return ll.to_list()
+
+
+def add_member(name, email, phone):
+    data = _load()
+    member = {"id": str(uuid.uuid4())[:8], "name": name, "email": email, "phone": phone, "active_loans": 0}
+    ll = _build_linked_list(data["members"])
+    ll.append(member)
+    data["members"] = ll.to_list()
+    _save(data)
+    return member
+
+
+def update_member(member_id, name, email, phone):
+    data = _load()
+    ht = _build_hash_table(data["members"])
+    member = ht.get(member_id)
+    if member is None:
         return False
-    data = load_data()
-    for m in data["members"]:
-        if m["id"] == member_id:
-            return False
-    new_member = {"id": member_id, "name": name, "email": email}
-    data["members"].append(new_member)
-    data["logs"].append(f"Registered member: {name} (ID: {member_id})")
-    save_data(data)
+    member["name"] = name
+    member["email"] = email
+    member["phone"] = phone
+    ht.insert(member_id, member)
+    data["members"] = [v for _, v in ht.items()]
+    _save(data)
     return True
 
-def read_members():
-    return load_data()["members"]
-
-def update_member(member_id, name, email):
-    data = load_data()
-    for m in data["members"]:
-        if m["id"] == member_id:
-            m["name"] = name
-            m["email"] = email
-            data["logs"].append(f"Updated member ID: {member_id}")
-            save_data(data)
-            return True
-    return False
 
 def delete_member(member_id):
-    data = load_data()
-    for i, m in enumerate(data["members"]):
-        if m["id"] == member_id:
-            del data["members"][i]
-            data["logs"].append(f"Removed member ID: {member_id}")
-            save_data(data)
-            return True
-    return False
+    data = _load()
+    ht = _build_hash_table(data["members"])
+    member = ht.get(member_id)
+    if member and member.get("active_loans", 0) > 0:
+        return False, "Anggota masih memiliki pinjaman aktif"
+    ll = _build_linked_list(data["members"])
+    removed = ll.remove(lambda m: m["id"] == member_id)
+    if removed:
+        data["members"] = ll.to_list()
+        _save(data)
+        return True, "Berhasil dihapus"
+    return False, "Anggota tidak ditemukan"
+
+
+def search_members(query):
+    members = get_all_members()
+    return linear_search(members, query, lambda m: m["name"] + " " + m["email"])
+
+
+def get_members_sorted():
+    members = get_all_members()
+    return merge_sort(members, lambda m: m["name"].lower())
+
+
+def get_member_by_id(member_id):
+    data = _load()
+    ht = _build_hash_table(data["members"])
+    return ht.get(member_id)
+
+
+def update_active_loans(member_id, delta):
+    data = _load()
+    ht = _build_hash_table(data["members"])
+    member = ht.get(member_id)
+    if member is None:
+        return False
+    member["active_loans"] = max(0, member.get("active_loans", 0) + delta)
+    ht.insert(member_id, member)
+    data["members"] = [v for _, v in ht.items()]
+    _save(data)
+    return True

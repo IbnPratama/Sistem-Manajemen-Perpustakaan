@@ -1,54 +1,120 @@
 import json
 import os
+import uuid
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data.json")
+from library_management.core.algorithms import binary_search, linear_search, merge_sort
+from library_management.core.structures import BST, HashTable, LinkedList
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump({"books": [], "members": [], "transactions": [], "reservations": [], "logs": []}, f)
-    with open(DATA_FILE, "r") as f:
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data.json")
+
+
+def _load():
+    with open(DATA_PATH, "r") as f:
         return json.load(f)
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
 
-def create_book(book_id, title, author, category, year):
-    if not book_id or not title or not author:
+def _save(data):
+    with open(DATA_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _build_linked_list(books):
+    ll = LinkedList()
+    for b in books:
+        ll.append(b)
+    return ll
+
+
+def _build_hash_table(books):
+    ht = HashTable()
+    for b in books:
+        ht.insert(b["id"], b)
+    return ht
+
+
+def _build_bst(books):
+    bst = BST()
+    sorted_books = merge_sort(books, lambda x: x["title"].lower())
+    for b in sorted_books:
+        bst.insert(b["title"].lower(), b)
+    return bst
+
+
+def get_all_books():
+    data = _load()
+    books = data.get("books", [])
+    ll = _build_linked_list(books)
+    return ll.to_list()
+
+
+def add_book(title, author, year, genre, stock):
+    data = _load()
+    book = {
+        "id": str(uuid.uuid4())[:8],
+        "title": title,
+        "author": author,
+        "year": int(year),
+        "genre": genre,
+        "stock": int(stock),
+    }
+    ll = _build_linked_list(data["books"])
+    ll.append(book)
+    data["books"] = ll.to_list()
+    _save(data)
+    return book
+
+
+def update_book(book_id, title, author, year, genre, stock):
+    data = _load()
+    ht = _build_hash_table(data["books"])
+    book = ht.get(book_id)
+    if book is None:
         return False
-    data = load_data()
-    for book in data["books"]:
-        if book["id"] == book_id:
-            return False
-    new_book = {"id": book_id, "title": title, "author": author, "category": category, "year": year}
-    data["books"].append(new_book)
-    data["logs"].append(f"Added book: {title} (ID: {book_id})")
-    save_data(data)
+    book["title"] = title
+    book["author"] = author
+    book["year"] = int(year)
+    book["genre"] = genre
+    book["stock"] = int(stock)
+    ht.insert(book_id, book)
+    data["books"] = [v for _, v in ht.items()]
+    _save(data)
     return True
 
-def read_books():
-    return load_data()["books"]
-
-def update_book(book_id, title, author, category, year):
-    data = load_data()
-    for book in data["books"]:
-        if book["id"] == book_id:
-            book["title"] = title
-            book["author"] = author
-            book["category"] = category
-            book["year"] = year
-            data["logs"].append(f"Updated book ID: {book_id}")
-            save_data(data)
-            return True
-    return False
 
 def delete_book(book_id):
-    data = load_data()
-    for i, book in enumerate(data["books"]):
-        if book["id"] == book_id:
-            del data["books"][i]
-            data["logs"].append(f"Deleted book ID: {book_id}")
-            save_data(data)
-            return True
-    return False
+    data = _load()
+    ll = _build_linked_list(data["books"])
+    removed = ll.remove(lambda b: b["id"] == book_id)
+    if removed:
+        data["books"] = ll.to_list()
+        _save(data)
+    return removed
+
+
+def search_books(query):
+    books = get_all_books()
+    return linear_search(books, query, lambda b: b["title"] + " " + b["author"])
+
+
+def get_books_sorted(key="title"):
+    books = get_all_books()
+    return merge_sort(books, lambda b: str(b.get(key, "")).lower())
+
+
+def get_book_by_id(book_id):
+    data = _load()
+    ht = _build_hash_table(data["books"])
+    return ht.get(book_id)
+
+
+def adjust_stock(book_id, delta):
+    data = _load()
+    ht = _build_hash_table(data["books"])
+    book = ht.get(book_id)
+    if book is None:
+        return False
+    book["stock"] = max(0, book["stock"] + delta)
+    ht.insert(book_id, book)
+    data["books"] = [v for _, v in ht.items()]
+    _save(data)
+    return True

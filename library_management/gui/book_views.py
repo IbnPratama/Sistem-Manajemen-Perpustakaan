@@ -1,144 +1,157 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from library_management.core.algorithms import binary_search, merge_sort
-from library_management.modules.books import create_book, delete_book, read_books, update_book
+from library_management.modules import books as book_module
 
 
-class BookView(ttk.Frame):
+class BookView(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent)
-        self.pack(fill=tk.BOTH, expand=True)
-        self.create_widgets()
-        self.refresh_table()
+        super().__init__(parent, bg="#f5f5f5")
+        self._selected_id = None
+        self._build_ui()
+        self._load_table()
 
-    def create_widgets(self):
-        form_frame = ttk.LabelFrame(self, text="Book Input Operations (CRUD)")
-        form_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
+    def _build_ui(self):
+        top = tk.Frame(self, bg="#f5f5f5")
+        top.pack(fill="x", padx=10, pady=(10, 0))
 
-        ttk.Label(form_frame, text="Book ID:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.ent_id = ttk.Entry(form_frame)
-        self.ent_id.grid(row=0, column=1, padx=5, pady=5)
+        tk.Label(top, text="Manajemen Buku", font=("Helvetica", 14, "bold"), bg="#f5f5f5").pack(side="left")
 
-        ttk.Label(form_frame, text="Title:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        self.ent_title = ttk.Entry(form_frame)
-        self.ent_title.grid(row=1, column=1, padx=5, pady=5)
+        search_frame = tk.Frame(top, bg="#f5f5f5")
+        search_frame.pack(side="right")
+        tk.Label(search_frame, text="Cari:", bg="#f5f5f5").pack(side="left")
+        self._search_var = tk.StringVar()
+        self._search_var.trace_add("write", lambda *_: self._on_search())
+        tk.Entry(search_frame, textvariable=self._search_var, width=20).pack(side="left", padx=4)
 
-        ttk.Label(form_frame, text="Author:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
-        self.ent_author = ttk.Entry(form_frame)
-        self.ent_author.grid(row=2, column=1, padx=5, pady=5)
+        sort_frame = tk.Frame(self, bg="#f5f5f5")
+        sort_frame.pack(fill="x", padx=10, pady=2)
+        tk.Label(sort_frame, text="Urutkan:", bg="#f5f5f5").pack(side="left")
+        self._sort_var = tk.StringVar(value="title")
+        for val, label in [("title", "Judul"), ("author", "Penulis"), ("year", "Tahun")]:
+            tk.Radiobutton(
+                sort_frame, text=label, variable=self._sort_var, value=val, bg="#f5f5f5", command=self._load_table
+            ).pack(side="left", padx=4)
 
-        ttk.Label(form_frame, text="Category:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.W)
-        self.ent_category = ttk.Entry(form_frame)
-        self.ent_category.grid(row=3, column=1, padx=5, pady=5)
+        cols = ("ID", "Judul", "Penulis", "Tahun", "Genre", "Stok")
+        self._tree = ttk.Treeview(self, columns=cols, show="headings", height=14)
+        widths = [70, 220, 150, 60, 100, 50]
+        for col, w in zip(cols, widths):
+            self._tree.heading(col, text=col)
+            self._tree.column(col, width=w, anchor="center")
+        self._tree.pack(fill="both", expand=True, padx=10, pady=4)
+        self._tree.bind("<<TreeviewSelect>>", self._on_select)
 
-        ttk.Label(form_frame, text="Year:").grid(row=4, column=0, padx=5, pady=5, sticky=tk.W)
-        self.ent_year = ttk.Entry(form_frame)
-        self.ent_year.grid(row=4, column=1, padx=5, pady=5)
+        form_frame = tk.LabelFrame(self, text="Form Buku", bg="#f5f5f5", padx=8, pady=6)
+        form_frame.pack(fill="x", padx=10, pady=(0, 4))
 
-        btn_frame = ttk.Frame(form_frame)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=10)
+        labels = ["Judul", "Penulis", "Tahun", "Genre", "Stok"]
+        self._entries = {}
+        for i, lbl in enumerate(labels):
+            tk.Label(form_frame, text=lbl + ":", bg="#f5f5f5").grid(row=0, column=i * 2, sticky="e", padx=(4, 2))
+            ent = tk.Entry(form_frame, width=14)
+            ent.grid(row=0, column=i * 2 + 1, padx=(0, 6))
+            self._entries[lbl.lower()] = ent
 
-        ttk.Button(btn_frame, text="Create", command=self.add_item).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Update", command=self.update_item).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Delete", command=self.delete_item).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Clear", command=self.clear_entries).pack(side=tk.LEFT, padx=2)
+        btn_frame = tk.Frame(self, bg="#f5f5f5")
+        btn_frame.pack(pady=4)
+        for text, cmd in [
+            ("Tambah", self._add),
+            ("Update", self._update),
+            ("Hapus", self._delete),
+            ("Reset", self._reset),
+        ]:
+            tk.Button(btn_frame, text=text, width=10, command=cmd).pack(side="left", padx=4)
 
-        right_frame = ttk.Frame(self)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        search_frame = ttk.LabelFrame(right_frame, text="Search & Sorting Metrics")
-        search_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
-
-        ttk.Label(search_frame, text="Search ID:").pack(side=tk.LEFT, padx=5)
-        self.ent_search = ttk.Entry(search_frame)
-        self.ent_search.pack(side=tk.LEFT, padx=5)
-        ttk.Button(search_frame, text="Binary Search", command=self.search_item).pack(side=tk.LEFT, padx=5)
-        ttk.Button(search_frame, text="Merge Sort Title", command=lambda: self.refresh_table("title")).pack(
-            side=tk.LEFT, padx=5
-        )
-        ttk.Button(search_frame, text="Merge Sort Year", command=lambda: self.refresh_table("year")).pack(
-            side=tk.LEFT, padx=5
-        )
-
-        table_frame = ttk.Frame(right_frame)
-        table_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
-
-        self.tree = ttk.Treeview(table_frame, columns=("ID", "Title", "Author", "Category", "Year"), show="headings")
-        self.tree.heading("ID", text="ID")
-        self.tree.heading("Title", text="Title")
-        self.tree.heading("Author", text="Author")
-        self.tree.heading("Category", text="Category")
-        self.tree.heading("Year", text="Year")
-        self.tree.pack(fill=tk.BOTH, expand=True)
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
-
-    def refresh_table(self, sort_key="id"):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        books = read_books()
-        books = merge_sort(books, sort_key)
+    def _load_table(self, books=None):
+        self._tree.delete(*self._tree.get_children())
+        if books is None:
+            books = book_module.get_books_sorted(self._sort_var.get())
         for b in books:
-            self.tree.insert("", tk.END, values=(b["id"], b["title"], b["author"], b["category"], b["year"]))
+            self._tree.insert(
+                "", "end", iid=b["id"], values=(b["id"], b["title"], b["author"], b["year"], b["genre"], b["stock"])
+            )
 
-    def search_item(self):
-        target = self.ent_search.get()
-        if not target:
-            self.refresh_table()
+    def _on_search(self):
+        q = self._search_var.get().strip()
+        if q:
+            results = book_module.search_books(q)
+            self._load_table(results)
+        else:
+            self._load_table()
+
+    def _on_select(self, _):
+        sel = self._tree.selection()
+        if not sel:
             return
-        books = read_books()
-        books = merge_sort(books, "id")
-        idx = binary_search(books, "id", target)
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        if idx != -1:
-            b = books[idx]
-            self.tree.insert("", tk.END, values=(b["id"], b["title"], b["author"], b["category"], b["year"]))
-        else:
-            messagebox.showinfo("Not Found", "Book identity data not matching inside records.")
+        self._selected_id = sel[0]
+        book = book_module.get_book_by_id(self._selected_id)
+        if book:
+            self._entries["judul"].delete(0, "end")
+            self._entries["judul"].insert(0, book["title"])
+            self._entries["penulis"].delete(0, "end")
+            self._entries["penulis"].insert(0, book["author"])
+            self._entries["tahun"].delete(0, "end")
+            self._entries["tahun"].insert(0, str(book["year"]))
+            self._entries["genre"].delete(0, "end")
+            self._entries["genre"].insert(0, book["genre"])
+            self._entries["stok"].delete(0, "end")
+            self._entries["stok"].insert(0, str(book["stock"]))
 
-    def add_item(self):
-        if create_book(
-            self.ent_id.get(), self.ent_title.get(), self.ent_author.get(), self.ent_category.get(), self.ent_year.get()
-        ):
-            messagebox.showinfo("Success", "New library asset recorded successfully.")
-            self.refresh_table()
-            self.clear_entries()
-        else:
-            messagebox.showerror("Error", "Validation failure. Invalid parameters or duplicate ID detected.")
+    def _get_form(self):
+        return (
+            self._entries["judul"].get().strip(),
+            self._entries["penulis"].get().strip(),
+            self._entries["tahun"].get().strip(),
+            self._entries["genre"].get().strip(),
+            self._entries["stok"].get().strip(),
+        )
 
-    def update_item(self):
-        if update_book(
-            self.ent_id.get(), self.ent_title.get(), self.ent_author.get(), self.ent_category.get(), self.ent_year.get()
-        ):
-            messagebox.showinfo("Success", "Target element rewritten successfully.")
-            self.refresh_table()
-            self.clear_entries()
-        else:
-            messagebox.showerror("Error", "Failed to resolve identifier target reference.")
+    def _validate(self, title, author, year, genre, stock):
+        if not all([title, author, year, genre, stock]):
+            messagebox.showwarning("Peringatan", "Semua field harus diisi")
+            return False
+        try:
+            int(year)
+            int(stock)
+        except ValueError:
+            messagebox.showwarning("Peringatan", "Tahun dan stok harus angka")
+            return False
+        return True
 
-    def delete_item(self):
-        if delete_book(self.ent_id.get()):
-            messagebox.showinfo("Success", "Record structural deletion verified.")
-            self.refresh_table()
-            self.clear_entries()
-        else:
-            messagebox.showerror("Error", "Failed to locate target record node structure.")
+    def _add(self):
+        title, author, year, genre, stock = self._get_form()
+        if not self._validate(title, author, year, genre, stock):
+            return
+        book_module.add_book(title, author, year, genre, stock)
+        messagebox.showinfo("Sukses", "Buku berhasil ditambahkan")
+        self._reset()
+        self._load_table()
 
-    def on_select(self, event):
-        selected = self.tree.selection()
-        if selected:
-            values = self.tree.item(selected[0], "values")
-            self.clear_entries()
-            self.ent_id.insert(0, values[0])
-            self.ent_title.insert(0, values[1])
-            self.ent_author.insert(0, values[2])
-            self.ent_category.insert(0, values[3])
-            self.ent_year.insert(0, values[4])
+    def _update(self):
+        if not self._selected_id:
+            messagebox.showwarning("Peringatan", "Pilih buku yang akan diupdate")
+            return
+        title, author, year, genre, stock = self._get_form()
+        if not self._validate(title, author, year, genre, stock):
+            return
+        book_module.update_book(self._selected_id, title, author, year, genre, stock)
+        messagebox.showinfo("Sukses", "Buku berhasil diupdate")
+        self._reset()
+        self._load_table()
 
-    def clear_entries(self):
-        self.ent_id.delete(0, tk.END)
-        self.ent_title.delete(0, tk.END)
-        self.ent_author.delete(0, tk.END)
-        self.ent_category.delete(0, tk.END)
-        self.ent_year.delete(0, tk.END)
+    def _delete(self):
+        if not self._selected_id:
+            messagebox.showwarning("Peringatan", "Pilih buku yang akan dihapus")
+            return
+        if messagebox.askyesno("Konfirmasi", "Yakin ingin menghapus buku ini?"):
+            book_module.delete_book(self._selected_id)
+            messagebox.showinfo("Sukses", "Buku berhasil dihapus")
+            self._reset()
+            self._load_table()
+
+    def _reset(self):
+        self._selected_id = None
+        for ent in self._entries.values():
+            ent.delete(0, "end")
+        self._tree.selection_remove(self._tree.selection())
