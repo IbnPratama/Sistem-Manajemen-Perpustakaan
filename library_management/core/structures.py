@@ -2,7 +2,6 @@ class Node:
     def __init__(self, data):
         self.data = data
         self.next = None
-
 class LinkedList:
     def __init__(self):
         self.head = None
@@ -25,12 +24,6 @@ class LinkedList:
             current = current.next
         return result
 
-    def from_list(self, py_list):
-        self.head = None
-        for item in py_list:
-            self.append(item)
-
-
 class Stack:
     def __init__(self):
         self.items = []
@@ -46,7 +39,6 @@ class Stack:
             return self.items.pop()
         return None
 
-
 class Queue:
     def __init__(self):
         self.items = []
@@ -61,12 +53,42 @@ class Queue:
         if not self.is_empty():
             return self.items.pop(0)
         return None
+    
+class HashTable:
+    def __init__(self, size=50):
+        self.size = size
+        self.table = [[] for _ in range(self.size)]
 
+    def _hash(self, key):
+        return sum(ord(char) for char in str(key)) % self.size
+
+    def insert(self, key, value):
+        hash_index = self._hash(key)
+        for kv in self.table[hash_index]:
+            if kv[0] == key:
+                kv[1] = value
+                return
+        self.table[hash_index].append([key, value])
+
+    def get(self, key):
+        hash_index = self._hash(key)
+        for kv in self.table[hash_index]:
+            if kv[0] == key:
+                return kv[1]
+        return None
+
+    def delete(self, key):
+        hash_index = self._hash(key)
+        for i, kv in enumerate(self.table[hash_index]):
+            if kv[0] == key:
+                del self.table[hash_index][i]
+                return True
+        return False
 
 class BSTNode:
-    def __init__(self, key, value):
-        self.key = key        
-        self.value = value    
+    def __init__(self, key, data):
+        self.key = key
+        self.data = data
         self.left = None
         self.right = None
 
@@ -74,59 +96,34 @@ class BinarySearchTree:
     def __init__(self):
         self.root = None
 
-    def insert(self, key, value):
-        new_node = BSTNode(key, value)
-        if self.root is None:
-            self.root = new_node
+    def insert(self, key, data):
+        if not self.root:
+            self.root = BSTNode(key, data)
         else:
-            self._insert_recursive(self.root, new_node)
+            self._insert_recursive(self.root, key, data)
 
-    def _insert_recursive(self, current, new_node):
-        if new_node.key < current.key:
+    def _insert_recursive(self, current, key, data):
+        if key < current.key:
             if current.left is None:
-                current.left = new_node
+                current.left = BSTNode(key, data)
             else:
-                self._insert_recursive(current.left, new_node)
+                self._insert_recursive(current.left, key, data)
         else:
             if current.right is None:
-                current.right = new_node
+                current.right = BSTNode(key, data)
             else:
-                self._insert_recursive(current.right, new_node)
+                self._insert_recursive(current.right, key, data)
 
-    def search(self, key):
-        return self._search_recursive(self.root, key)
+    def inorder_traversal(self):
+        result = []
+        self._inorder_recursive(self.root, result)
+        return result
 
-    def _search_recursive(self, current, key):
-        if current is None or current.key == key:
-            return current.value if current else None
-        if key < current.key:
-            return self._search_recursive(current.left, key)
-        return self._search_recursive(current.right, key)
-
-
-class HashMap:
-    def __init__(self, size=10):
-        self.size = size
-        self.table = [[] for _ in range(self.size)]  
-
-    def _hash(self, key):
-        return sum(ord(char) for char in str(key)) % self.size
-
-    def put(self, key, value):
-        hash_index = self._hash(key)
-        for pair in self.table[hash_index]:
-            if pair[0] == key:
-                pair[1] = value
-                return
-        self.table[hash_index].append([key, value])
-
-    def get(self, key):
-        hash_index = self._hash(key)
-        for pair in self.table[hash_index]:
-            if pair[0] == key:
-                return pair[1]
-        return None
-
+    def _inorder_recursive(self, current, result):
+        if current:
+            self._inorder_recursive(current.left, result)
+            result.append(current.data)
+            self._inorder_recursive(current.right, result)
 
 class Graph:
     def __init__(self):
@@ -142,7 +139,7 @@ class Graph:
         if book_id2 not in self.adjacency_list[book_id1]:
             self.adjacency_list[book_id1].append(book_id2)
         if book_id1 not in self.adjacency_list[book_id2]:
-            self.adjacency_list[book_id2].append(book_id1)
+            self.adjacency_list[book_id2].append(book_id2) 
 
     def get_recommendations(self, book_id):
         return self.adjacency_list.get(book_id, [])
