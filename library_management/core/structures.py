@@ -240,3 +240,21 @@ class BST:
             self._inorder(node.left, result)
             result.append(node.data)
             self._inorder(node.right, result)
+class Graph:
+    def __init__(self):
+        self.adjacency_list = {}
+
+    def add_vertex(self, book_id):
+        if book_id not in self.adjacency_list:
+            self.adjacency_list[book_id] = []
+
+    def add_edge(self, book_id1, book_id2):
+        self.add_vertex(book_id1)
+        self.add_vertex(book_id2)
+        if book_id2 not in self.adjacency_list[book_id1]:
+            self.adjacency_list[book_id1].append(book_id2)
+        if book_id1 not in self.adjacency_list[book_id2]:
+            self.adjacency_list[book_id2].append(book_id2) 
+
+    def get_recommendations(self, book_id):
+        return self.adjacency_list.get(book_id, [])
